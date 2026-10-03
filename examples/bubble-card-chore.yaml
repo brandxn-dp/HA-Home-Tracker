@@ -1,0 +1,50 @@
+# One chore as a Bubble Card slider button.
+#
+# Replace:
+#   sensor.mow_the_lawn           -> your Chore Helper sensor
+#   sensor.mow_the_lawn_progress  -> the progress Template Helper you created for it
+#
+# Tap anywhere on the card -> marks the chore done (resets the bar).
+# Hold                     -> opens the chore's more-info dialog.
+
+type: custom:bubble-card
+card_type: button
+button_type: slider
+entity: sensor.mow_the_lawn_progress
+name: Mow the Lawn
+icon: mdi:mower
+
+# The bar is read-only: it only shows progress, it can't be dragged.
+read_only_slider: true
+slider_value_position: hidden
+
+# false (default): the bar fills up as the due date approaches.
+# true:            the bar starts full and empties as the due date approaches.
+invert_slider_value: false
+
+# Optional subheading. Delete this line to hide it.
+state_content: >-
+  {% from 'chore_tracker.jinja' import chore_due_text %}{{ chore_due_text('sensor.mow_the_lawn') }}
+
+# The icon and the rest of the card share the same actions.
+tap_action: &complete
+  action: perform-action
+  perform_action: chore_helper.complete
+  target:
+    entity_id: sensor.mow_the_lawn
+  # Uncomment to ask before resetting:
+  # confirmation:
+  #   text: Mark "Mow the Lawn" as done?
+hold_action: &details
+  action: more-info
+  entity: sensor.mow_the_lawn
+button_action:
+  tap_action: *complete
+  hold_action: *details
+
+# Bar colour.
+styles: |
+  .bubble-range-fill {
+    background: #a0784f !important;
+    opacity: 1 !important;
+  }

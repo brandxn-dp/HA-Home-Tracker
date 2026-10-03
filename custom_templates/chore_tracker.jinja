@@ -1,0 +1,71 @@
+{#-
+  Chore Tracker macros for Chore Helper (https://github.com/bmcclure/ha-chore-helper)
+  sensors, built for Bubble Card slider buttons.
+
+  Install: copy this file to <config>/custom_templates/chore_tracker.jinja, then run
+  the `homeassistant.reload_custom_templates` action (no restart needed).
+
+  Import it inside every template that uses it:
+    {% from 'chore_tracker.jinja' import chore_progress, chore_due_text %}
+-#}
+
+{#-
+  chore_progress(entity_id, fallback_days=7)
+
+  Percentage (0-100) of the current cycle that has elapsed, from when the chore was
+  last completed until it is due. 0 = just done, 100 = due today or overdue.
+  The cycle ends at the start (00:00) of the due date, so the bar is full all day
+  on the day the chore is due.
+
+  fallback_days is used as the cycle length for a chore that has never been
+  completed (Chore Helper has no last_completed date to start from yet).
+-#}
+{% macro chore_progress(entity_id, fallback_days=7) -%}
+  {%- set due_raw = state_attr(entity_id, 'next_due_date') -%}
+  {%- if due_raw is none -%}
+    0
+  {%- else -%}
+    {%- set due_date = ((due_raw | string)[:10] | as_datetime).date() -%}
+    {%- set due = today_at('00:00') + timedelta(days=(due_date - now().date()).days) -%}
+    {%- set last_raw = state_attr(entity_id, 'last_completed') -%}
+    {%- if last_raw is none -%}
+      {%- set start = due - timedelta(days=fallback_days | int(7)) -%}
+    {%- else -%}
+      {%- set start = last_raw | string | as_datetime | as_local -%}
+    {%- endif -%}
+    {%- set total = (due - start).total_seconds() -%}
+    {%- if total <= 0 -%}
+      100
+    {%- else -%}
+      {%- set elapsed = (now() - start).total_seconds() -%}
+      {{- [[elapsed / total * 100, 0] | max, 100] | min | round(1) -}}
+    {%- endif -%}
+  {%- endif -%}
+{%- endmacro %}
+
+{#-
+  chore_due_text(entity_id)
+
+  Human-friendly time until the chore is due, for the card's subheading:
+  "Due in 3 days", "Due tomorrow", "Due today", "Overdue by 2 days", "Due in 3 weeks".
+-#}
+{% macro chore_due_text(entity_id) -%}
+  {%- if not has_value(entity_id) -%}
+    Not scheduled
+  {%- else -%}
+    {%- set days = states(entity_id) | int(0) -%}
+    {%- if days < -1 -%}
+      Overdue by {{ -days }} days
+    {%- elif days == -1 -%}
+      Overdue by 1 day
+    {%- elif days == 0 -%}
+      Due today
+    {%- elif days == 1 -%}
+      Due tomorrow
+    {%- elif days < 14 -%}
+      Due in {{ days }} days
+    {%- else -%}
+      Due in {{ (days / 7) | round(0) | int }} weeks
+    {%- endif -%}
+  {%- endif -%}
+{%- endmacro %}
