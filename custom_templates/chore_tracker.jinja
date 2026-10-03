@@ -1,71 +1,113 @@
 {#-
-  Chore Tracker macros for Chore Helper (https://github.com/bmcclure/ha-chore-helper)
-  sensors, built for Bubble Card slider buttons.
+  Chore Tracker macros for Chore Calendar sensors
+  (https://github.com/tcarney/ha-chore-calendar), built for Bubble Card sliders.
 
   Install: copy this file to <config>/custom_templates/chore_tracker.jinja, then run
   the `homeassistant.reload_custom_templates` action (no restart needed).
 
   Import it inside every template that uses it:
     {% from 'chore_tracker.jinja' import chore_progress, chore_due_text %}
+
+  A Chore Calendar chore sensor has the state pending / due / overdue / completed
+  and the attributes next_due, last_completed and chore_type
+  (scheduled = fixed days, interval = counted from the last completion).
 -#}
 
 {#-
-  chore_progress(entity_id, fallback_days=7)
+  macro_chore_cycle(entity_id, period_days, returns)  -- internal helper
 
-  Percentage (0-100) of the current cycle that has elapsed, from when the chore was
-  last completed until it is due. 0 = just done, 100 = due today or overdue.
-  The cycle ends at the start (00:00) of the due date, so the bar is full all day
-  on the day the chore is due.
+  Works out the current cycle as [start, end] (local datetimes). `end` is when
+  the chore is next due. `start` is the later of the last completion and one
+  period before `end`.
 
-  fallback_days is used as the cycle length for a chore that has never been
-  completed (Chore Helper has no last_completed date to start from yet).
+  A scheduled chore that was completed early keeps next_due on the period it
+  just satisfied until that due time passes. In that case the cycle runs from
+  the completion to the following occurrence (one period later) so the bar
+  resets as soon as you tap it.
 -#}
-{% macro chore_progress(entity_id, fallback_days=7) -%}
-  {%- set due_raw = state_attr(entity_id, 'next_due_date') -%}
-  {%- if due_raw is none -%}
-    0
+{% macro macro_chore_cycle(entity_id, period_days, returns) -%}
+  {%- set next_raw = state_attr(entity_id, 'next_due') -%}
+  {%- set last_raw = state_attr(entity_id, 'last_completed') -%}
+  {%- set next = (next_raw | string | as_datetime | as_local) if next_raw else none -%}
+  {%- set last = (last_raw | string | as_datetime | as_local) if last_raw else none -%}
+  {%- if next is none -%}
+    {%- do returns(none) -%}
   {%- else -%}
-    {%- set due_date = ((due_raw | string)[:10] | as_datetime).date() -%}
-    {%- set due = today_at('00:00') + timedelta(days=(due_date - now().date()).days) -%}
-    {%- set last_raw = state_attr(entity_id, 'last_completed') -%}
-    {%- if last_raw is none -%}
-      {%- set start = due - timedelta(days=fallback_days | int(7)) -%}
+    {%- if period_days -%}
+      {%- set period = timedelta(days=period_days | float(7)) -%}
+    {%- elif last is not none and next > last -%}
+      {%- set period = next - last -%}
     {%- else -%}
-      {%- set start = last_raw | string | as_datetime | as_local -%}
+      {%- set period = timedelta(days=7) -%}
     {%- endif -%}
-    {%- set total = (due - start).total_seconds() -%}
+    {%- set satisfied = is_state(entity_id, 'completed')
+        and last is not none and now() < next and (next - last) < period / 2 -%}
+    {%- set end = next + period if satisfied else next -%}
+    {%- set start = [last, end - period] | min if last is not none else end - period -%}
+    {%- do returns({'start': start, 'end': end}) -%}
+  {%- endif -%}
+{%- endmacro %}
+
+{#-
+  chore_progress(entity_id, period_days=none)
+
+  Percentage (0-100) of the current cycle that has elapsed: 0 = just done,
+  100 = due now or overdue.
+
+  period_days is the chore's normal cycle length (7 for weekly). Pass it for
+  scheduled (fixed-day) chores. For interval chores it can be left out: the
+  cycle is taken from last_completed to next_due.
+-#}
+{% macro chore_progress(entity_id, period_days=none) -%}
+  {%- set cycle = macro_chore_cycle | as_function -%}
+  {%- set c = cycle(entity_id, period_days) -%}
+  {%- if c is none -%}
+    {{- 100 if states(entity_id) in ['due', 'overdue'] else 0 -}}
+  {%- else -%}
+    {%- set total = (c.end - c.start).total_seconds() -%}
     {%- if total <= 0 -%}
       100
     {%- else -%}
-      {%- set elapsed = (now() - start).total_seconds() -%}
-      {{- [[elapsed / total * 100, 0] | max, 100] | min | round(1) -}}
+      {%- set pct = (now() - c.start).total_seconds() / total * 100 -%}
+      {{- [[pct, 0] | max, 100] | min | round(1) -}}
     {%- endif -%}
   {%- endif -%}
 {%- endmacro %}
 
 {#-
-  chore_due_text(entity_id)
+  chore_due_text(entity_id, period_days=none)
 
-  Human-friendly time until the chore is due, for the card's subheading:
-  "Due in 3 days", "Due tomorrow", "Due today", "Overdue by 2 days", "Due in 3 weeks".
+  Subheading text: "Due in 3 days", "Due tomorrow", "Due today",
+  "Overdue by 2 days", "Due in 3 weeks", or "Done" when there is no next date.
 -#}
-{% macro chore_due_text(entity_id) -%}
+{% macro chore_due_text(entity_id, period_days=none) -%}
+  {%- set cycle = macro_chore_cycle | as_function -%}
+  {%- set c = cycle(entity_id, period_days) -%}
   {%- if not has_value(entity_id) -%}
-    Not scheduled
+    Unavailable
+  {%- elif c is none -%}
+    {{- 'Due now' if states(entity_id) in ['due', 'overdue'] else 'Not scheduled' -}}
   {%- else -%}
-    {%- set days = states(entity_id) | int(0) -%}
-    {%- if days < -1 -%}
-      Overdue by {{ -days }} days
-    {%- elif days == -1 -%}
-      Overdue by 1 day
+    {%- set days = (c.end.date() - now().date()).days -%}
+    {%- if is_state(entity_id, 'overdue') or days < 0 -%}
+      {%- set late = [(now().date() - c.end.date()).days, 0] | max -%}
+      {%- if late == 0 -%}
+        Overdue
+      {%- elif late == 1 -%}
+        Overdue by 1 day
+      {%- else -%}
+        Overdue by {{ late }} days
+      {%- endif -%}
     {%- elif days == 0 -%}
       Due today
     {%- elif days == 1 -%}
       Due tomorrow
     {%- elif days < 14 -%}
       Due in {{ days }} days
-    {%- else -%}
+    {%- elif days < 60 -%}
       Due in {{ (days / 7) | round(0) | int }} weeks
+    {%- else -%}
+      Due in {{ (days / 30.4) | round(0) | int }} months
     {%- endif -%}
   {%- endif -%}
 {%- endmacro %}
