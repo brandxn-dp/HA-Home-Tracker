@@ -31,6 +31,8 @@ Card slider can display.
 | --- | --- |
 | [`custom_templates/chore_tracker.jinja`](custom_templates/chore_tracker.jinja) | Jinja macros: `chore_progress` (0–100 %) and `chore_due_text` ("Due in 3 days") |
 | [`examples/bubble-card-chore.yaml`](examples/bubble-card-chore.yaml) | One fully commented chore card |
+| [`examples/chores-dashboard.yaml`](examples/chores-dashboard.yaml) | The full Chores dashboard: five starter chores as a Bubble Card grid |
+| [`scripts/build_dashboard.py`](scripts/build_dashboard.py) | Generates `chores-dashboard.yaml` from a list of chores (name, sensors, icon, colour, cycle length) |
 
 ## Setup
 
@@ -81,7 +83,7 @@ it doesn't exist. Then go to Developer tools → Actions and run
 
 Settings → Devices & Services → Helpers → **Create helper** → **Template** → **Template a sensor**:
 
-- **Name**: `Mow the Lawn Progress`
+- **Name**: `Mow the Lawn Progress` (creates `sensor.mow_the_lawn_progress`)
 - **State template**: the second argument is the chore's cycle length in days. It can be
   left out for interval chores.
   ```jinja
@@ -96,11 +98,17 @@ updates every minute. If a fixed-day chore is done early, Chore Calendar keeps `
 on the period you just satisfied until it passes. The macro accounts for this, so the bar
 still resets the moment you tap it.
 
-### 5. Add the card
+### 5. Add the cards
 
-Dashboard → Edit → Add card → **Manual**, and paste
+For one card: Dashboard → Edit → Add card → **Manual**, and paste
 [`examples/bubble-card-chore.yaml`](examples/bubble-card-chore.yaml). Replace the entity IDs
 with your own.
+
+For a whole dashboard: Settings → Dashboards → **Add dashboard** → *New dashboard from
+scratch*, open it, then ⋮ → Edit → ⋮ → **Raw configuration editor**, and paste
+[`examples/chores-dashboard.yaml`](examples/chores-dashboard.yaml). To change the chore list,
+edit `CHORES` in [`scripts/build_dashboard.py`](scripts/build_dashboard.py) and run
+`python3 scripts/build_dashboard.py` (requires PyYAML) to regenerate it.
 
 | Option | Effect |
 | --- | --- |

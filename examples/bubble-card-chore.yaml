@@ -2,7 +2,7 @@
 #
 # Replace:
 #   sensor.chores_mow_the_lawn           -> your Chore Calendar chore sensor
-#   sensor.chores_mow_the_lawn_progress  -> the progress Template Helper you created for it
+#   sensor.mow_the_lawn_progress         -> the progress Template Helper you created for it
 #   7                                    -> the chore's cycle length in days
 #
 # Tap anywhere on the card -> marks the chore done (resets the bar).
@@ -11,7 +11,7 @@
 type: custom:bubble-card
 card_type: button
 button_type: slider
-entity: sensor.chores_mow_the_lawn_progress
+entity: sensor.mow_the_lawn_progress
 name: Mow the Lawn
 icon: mdi:mower
 
